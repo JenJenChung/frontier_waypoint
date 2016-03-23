@@ -6,7 +6,7 @@ When used with move_base, it is recommended that you:
 
 These values can be found in the base_local_planner_params.yaml, which is typically in the folder with the move_base.launch file.
 
-The frontier waypoint execution will begin after an initial waypoint is sent and achieved by the base.
+The frontier waypoint execution will begin after an initial waypoint is sent and achieved by the base. You can do this by commanding a 2D nav goal via the rviz interface, or by publishing a message to the /map_goal or /base_link_goal topics.
 
 The frontier_waypoint node handles the calculation of frontier cells, frontier centroids and manages waypoint allocation. The node keeps track of previously unachieved waypoints and does not attempt to submit them again. It publishes two topics:
   - "fontier_cells": an OccupancyGrid message that identifies frontier cells
