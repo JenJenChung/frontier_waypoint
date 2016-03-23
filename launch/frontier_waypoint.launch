@@ -1,0 +1,7 @@
+<launch>
+  <node pkg="frontier_waypoint" type="frontier_waypoint" respawn="false" name="frontier_waypoint" output="screen"/>
+  <node pkg="frontier_waypoint" type="frontier_map" respawn="false" name="frontier_map" output="screen">
+<!--    <rosparam file="$(find pioneer_2dnav)/costmap_common_params.yaml" command="load"/>-->
+    <rosparam file="$(find frontier_waypoint)/frontier_costmap_params.yaml" command="load" ns="frontier_map"/>
+  </node>
+</launch>

@@ -9,6 +9,8 @@ find_package(catkin REQUIRED COMPONENTS
   move_base
   roscpp
   rospy
+  tf
+  costmap_2d
 )
 
 
@@ -22,3 +24,7 @@ include_directories(
 add_executable(frontier_waypoint src/frontier_waypoint.cpp)
 target_link_libraries(frontier_waypoint ${catkin_LIBRARIES})
 add_dependencies(frontier_waypoint ${catkin_EXPORTED_TARGETS})
+
+add_executable(frontier_map src/frontier_map.cpp)
+target_link_libraries(frontier_map ${catkin_LIBRARIES})
+add_dependencies(frontier_map ${catkin_EXPORTED_TARGETS})

@@ -5,7 +5,6 @@
 #include "geometry_msgs/Pose.h"
 #include "map_msgs/OccupancyGridUpdate.h"
 #include <move_base_msgs/MoveBaseActionResult.h>
-#include <actionlib_msgs/GoalID.h>
 #include <ros/console.h>
 #include <vector>
 #include <math.h>
@@ -27,7 +26,6 @@ class frontier
     ros::Subscriber subCostMap ;
     ros::Publisher pubFrontierMap ;
     ros::Publisher pubWaypoint ;
-    ros::Publisher pubCancelAllGoals ;
     bool fWaypoint ;
     bool fMap ;
     bool fOdom ;
@@ -39,12 +37,12 @@ class frontier
     UINT width ;
     UINT height ;
     UINT frontierThreshold ;
+    double cancelThreshold ;
+    vector< vector<double> > cancelledWaypoints ;
     
-    void cancelNavigation() ;
     void waypointCallback(const move_base_msgs::MoveBaseActionResult&) ;
     void mapCallback(const nav_msgs::OccupancyGrid&) ;
     void odomCallback(const nav_msgs::Odometry&) ;
-//    void costmapCallback(const map_msgs::OccupancyGridUpdate&) ;
     void neighbours(UINT, vector<UINT> &, vector<UINT> &) ;
     vector< vector<UINT> > frontierCentroids() ;
     vector<double> centroidSelection(vector <vector<UINT> >) ;
@@ -54,22 +52,26 @@ frontier::frontier(ros::NodeHandle nh){
   subResult = nh.subscribe("move_base/result", 10, &frontier::waypointCallback, this) ;
   subMap = nh.subscribe("map", 10, &frontier::mapCallback, this) ;
   subOdom = nh.subscribe("odom", 10, &frontier::odomCallback, this) ;
-//  subCostMap = nh.subscribe("move_base/global_costmap/costmap_updates", 10, &frontier::costmapCallback, this) ;
   pubFrontierMap = nh.advertise<nav_msgs::OccupancyGrid>("frontier_cells", 50, true) ;
   pubWaypoint = nh.advertise<geometry_msgs::Twist>("map_goal", 10) ;
-  pubCancelAllGoals = nh.advertise<actionlib_msgs::GoalID>("move_base/cancel", 10) ;
   fWaypoint = false ;
   fMap = false ;
   fOdom = false ;
   frontierThreshold = 10 ;
-  ros::param::set("/move_base/TrajectoryPlannerROS/yaw_goal_tolerance",6.0) ;
+  cancelThreshold = 0.1 ;
+  ros::param::set("/move_base/TrajectoryPlannerROS/yaw_goal_tolerance",6.0) ; // doesn't seem to do anything
 }
 
 void frontier::waypointCallback(const move_base_msgs::MoveBaseActionResult& msg){
   result = msg ;
   if (fMap == true && fOdom == true){
-    // Cancel previous
-    cancelNavigation() ;
+    if (msg.status.status == 6 || msg.status.status == 2 || msg.status.status == 4 || msg.status.status == 5){ // waypoint was preempted or aborted
+      vector<double> wp_old ;
+      wp_old.push_back(waypoint.linear.x)  ;
+      wp_old.push_back(waypoint.linear.y)  ;
+      cancelledWaypoints.push_back(wp_old) ;
+      ROS_INFO_STREAM("Number of cancelled waypoints: " << cancelledWaypoints.size()) ;
+    }
     // Compute the centroid of all connected frontiers
     vector< vector<UINT> > centroids = frontierCentroids() ;
     vector<double> wp = centroidSelection(centroids) ;
@@ -164,36 +166,6 @@ void frontier::odomCallback(const nav_msgs::Odometry& msg){
   pose.orientation.w = msg.pose.pose.orientation.w ;
 }
 
-//void frontier::costmapCallback(const map_msgs::OccupancyGridUpdate& msg){
-//  if (fWaypoint == true){
-//    // Check if current waypoint is still in valid freespace
-//    double j = (waypoint.linear.x-frontierMap.info.origin.position.y)/(double)frontierMap.info.resolution ;
-//    double i = (waypoint.linear.y-frontierMap.info.origin.position.x)/(double)frontierMap.info.resolution ;
-//    UINT ii = (UINT) i ;
-//    UINT jj = (UINT) j ;
-//    ROS_INFO_STREAM("Current waypoint cost estimate: " << msg.data[ii*width+jj]) ;
-//    if (msg.data[ii*width+jj] > 20)
-//      // Replan to new frontier waypoint
-//      ROS_INFO_STREAM("Current waypoint too costly, replanning to new frontier waypoint.") ;
-//      cancelNavigation() ;
-//      // Compute the centroid of all connected frontiers
-//      vector< vector<UINT> > centroids = frontierCentroids() ;
-//      vector<double> wp = centroidSelection(centroids) ;
-//      if (wp.size() == 2){
-//        waypoint.linear.x = wp[0] ;
-//        waypoint.linear.y = wp[1] ;
-//        waypoint.linear.z = 0 ;
-//        waypoint.angular.x = 0 ;
-//        waypoint.angular.y = 0 ;
-//        waypoint.angular.z = 0 ;
-//        ROS_INFO_STREAM("Sending new waypoint ("<< waypoint.linear.x << "," << waypoint.linear.y << ")") ;
-//        pubWaypoint.publish(waypoint) ;
-//      }
-//      else
-//        ROS_INFO_STREAM("No valid frontiers found.") ;
-//  }
-//}
-
 void frontier::neighbours(UINT i, vector<UINT> &r, vector<UINT> &c){
   r.push_back(i/width) ;
   c.push_back(i%width) ;
@@ -269,7 +241,7 @@ vector< vector<UINT> > frontier::frontierCentroids(){
 }
 
 vector<double> frontier::centroidSelection(vector <vector<UINT> > centroids){
-  vector<double> waypoint ;
+  vector<double> cmd_wp ;
   double minDistance = sqrt(pow((double)width,2)+pow((double)height,2))*frontierMap.info.resolution ;
   int minInd = -1 ;
   for (UINT i = 0; i < centroids.size(); i++){
@@ -278,8 +250,16 @@ vector<double> frontier::centroidSelection(vector <vector<UINT> > centroids){
     if (centroids[i][0] >= frontierThreshold && slamMap.data[ii] < 10){
       double x = (double)centroids[i][2]*frontierMap.info.resolution + frontierMap.info.origin.position.y ;
       double y = (double)centroids[i][1]*frontierMap.info.resolution + frontierMap.info.origin.position.x ;
+      bool noGoList = false ;
+      for (UINT j = 0; j < cancelledWaypoints.size(); j++){
+        if (abs(cancelledWaypoints[j][0] - x) < cancelThreshold && abs(cancelledWaypoints[j][1] - y) < cancelThreshold){
+          ROS_INFO_STREAM("Ignoring previous failed cases.") ;
+          noGoList = true ;
+          break ;
+        }
+      }
       double distance = sqrt(pow((x-pose.position.x),2) + pow((y-pose.position.y),2)) ;
-      if (distance < minDistance){
+      if (distance < minDistance && !noGoList){
         minDistance = distance ;
         minInd = i ;
       }
@@ -287,17 +267,11 @@ vector<double> frontier::centroidSelection(vector <vector<UINT> > centroids){
   }
   
   if (minInd >= 0){
-    waypoint.push_back(centroids[minInd][2]*frontierMap.info.resolution + frontierMap.info.origin.position.y) ;
-    waypoint.push_back(centroids[minInd][1]*frontierMap.info.resolution + frontierMap.info.origin.position.x) ;
+    cmd_wp.push_back(centroids[minInd][2]*frontierMap.info.resolution + frontierMap.info.origin.position.y) ;
+    cmd_wp.push_back(centroids[minInd][1]*frontierMap.info.resolution + frontierMap.info.origin.position.x) ;
   }
   else
-    waypoint.push_back(0) ; // flag since no valid frontiers were found
+    cmd_wp.push_back(0) ; // flag since no valid frontiers were found
   
-  return waypoint ;
-}
-
-void frontier::cancelNavigation()
-{
-  actionlib_msgs::GoalID cancelGoals ;
-  pubCancelAllGoals.publish(cancelGoals) ;
+  return cmd_wp ;
 }
