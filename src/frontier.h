@@ -57,9 +57,13 @@ frontier::frontier(ros::NodeHandle nh){
   fWaypoint = false ;
   fMap = false ;
   fOdom = false ;
-  frontierThreshold = 10 ;
-  cancelThreshold = 0.1 ;
-  ros::param::set("/move_base/TrajectoryPlannerROS/yaw_goal_tolerance",6.0) ; // doesn't seem to do anything
+  double temp = 0.0 ;
+  ros::param::get("frontier_waypoint/frontier_threshold", temp) ;
+  frontierThreshold = (UINT) temp ;
+  ROS_INFO_STREAM("Frontier occupancy threshold: " << frontierThreshold) ;
+  ros::param::get("frontier_waypoint/cancel_threshold", temp) ;
+  cancelThreshold = temp ;
+  ROS_INFO_STREAM("Waypoint cancel threshold: " << cancelThreshold) ;
 }
 
 void frontier::waypointCallback(const move_base_msgs::MoveBaseActionResult& msg){
