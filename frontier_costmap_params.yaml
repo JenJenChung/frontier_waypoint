@@ -5,8 +5,8 @@ global_frame: /map
 robot_base_frame: base_link
 
 static_map: false
-height: 4000
-width: 4000  
+#height: 4000
+#width: 4000  
 resolution: 0.05
 origin_x: -100.0
 origin_y: -100.0
