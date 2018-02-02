@@ -27,6 +27,8 @@ obstacle_layer:
   footprint_clearing_enabled: true
   laser_scan_sensor: {clearing: true, data_type: LaserScan, expected_update_rate: 0.4,
     marking: true, sensor_frame: laser, topic: base_scan}
+#  laser_scan_sensor: {clearing: true, data_type: LaserScan, expected_update_rate: 0.4,
+#    marking: true, sensor_frame: base_laser_link, topic: base_scan}
   max_obstacle_height: 2.0
   observation_sources: laser_scan_sensor
   obstacle_range: 1.5
