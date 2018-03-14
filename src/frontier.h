@@ -39,6 +39,7 @@ class frontier
     UINT frontierThreshold ;
     double cancelThreshold ;
     vector< vector<double> > cancelledWaypoints ;
+    vector< vector<double> > sentWaypoints ;
     
     void waypointCallback(const move_base_msgs::MoveBaseActionResult&) ;
     void mapCallback(const nav_msgs::OccupancyGrid&) ;
@@ -86,6 +87,7 @@ void frontier::waypointCallback(const move_base_msgs::MoveBaseActionResult& msg)
       waypoint.angular.x = 0 ;
       waypoint.angular.y = 0 ;
       waypoint.angular.z = 0 ;
+      sentWaypoints.push_back(wp) ;
       ROS_INFO_STREAM("Sending new waypoint ("<< waypoint.linear.x << "," << waypoint.linear.y << ")") ;
       pubWaypoint.publish(waypoint) ;
       fWaypoint = true ;
@@ -258,6 +260,13 @@ vector<double> frontier::centroidSelection(vector <vector<UINT> > centroids){
       for (UINT j = 0; j < cancelledWaypoints.size(); j++){
         if (abs(cancelledWaypoints[j][0] - x) < cancelThreshold && abs(cancelledWaypoints[j][1] - y) < cancelThreshold){
           ROS_INFO_STREAM("Ignoring previous failed cases.") ;
+          noGoList = true ;
+          break ;
+        }
+      }
+      for (UINT j = 0; j < sentWaypoints.size(); j++){
+        if (abs(sentWaypoints[j][0] - x) < cancelThreshold && abs(sentWaypoints[j][1] - y) < cancelThreshold){
+          ROS_INFO_STREAM("Ignoring previously sent waypoints.") ;
           noGoList = true ;
           break ;
         }
